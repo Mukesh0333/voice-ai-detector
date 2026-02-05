@@ -1,11 +1,26 @@
+import librosa
+import torch
+import joblib
+from transformers import Wav2Vec2Processor, Wav2Vec2Model
+
+# Load wav2vec
+processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+wav2vec = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+wav2vec.eval()
+
+# Load trained classifier
+clf = joblib.load("models/voice_classifier.pkl")
+
 def predict_voice(audio_path):
-    """
-    This will later load wav2vec + classifier.
-    For now it returns a mock prediction.
-    """
+    audio, _ = librosa.load(audio_path, sr=16000)
+    inputs = processor(audio, return_tensors="pt", sampling_rate=16000)
 
-    # TEMP logic
-    result = "AI_GENERATED"
-    confidence = 0.73
+    with torch.no_grad():
+        embedding = wav2vec(inputs.input_values).last_hidden_state.mean(dim=1)
 
-    return result, confidence
+    probs = clf.predict_proba(embedding.numpy())[0]
+
+    label = "AI_GENERATED" if probs[1] > probs[0] else "HUMAN"
+    confidence = float(max(probs))
+
+    return label, confidence
